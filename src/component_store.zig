@@ -110,7 +110,7 @@ pub fn denseSparseSetStore(comptime T: type, store: *DenseSparseSet(T)) Componen
 }
 
 // Adapter for RingBufferedSparseSet — exposes the current write buffer to
-// update systems. The renderer bypasses this and calls currentSlice() /
+// update systems. Observers bypass this and call currentSlice() /
 // previousSlice() directly on the concrete type.
 pub fn ringBufferedSparseSetStore(comptime T: type, comptime N: usize, store: *RingBufferedSparseSet(T, N)) ComponentStore(T) {
     const Adapter = struct {

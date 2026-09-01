@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [SemVer](https://semver.org/). **0.x is unstable**: the
 public API may change without a major bump. Pin consumers to a tag.
 
+## [0.1.1] — 2026-09-01
+
+### Changed
+
+- `World.init` takes only an allocator. World never performed I/O; Debug
+  metrics in `ThrottledSystem` timestamp via an internal clock.
+- Comments no longer cite IdleGenerator ADRs (`ADR-0001` / `0002` / `0003`)
+  that are not in this repository.
+
+### Fixed
+
+- `DoubleBufferedSparseSet.advance` so `World.advanceRingBuffers` actually
+  rotates ping-pong stores (only `swap()` existed before).
+- `RingBufferedSparseSet.getConst` for parity with `SparseSet` /
+  `DenseSparseSet`.
+
 ## [0.1.0] — 2026-09-01
 
 Initial extract of the raw ECS from
@@ -36,4 +52,5 @@ Initial extract of the raw ECS from
   an ANSI renderer. Planned for 0.2; see [docs/roadmap.md](docs/roadmap.md).
 - Renderer, game systems, templates, HUD.
 
+[0.1.1]: https://github.com/stayler92/zecs/releases/tag/0.1.1
 [0.1.0]: https://github.com/stayler92/zecs/releases/tag/0.1.0

@@ -32,7 +32,7 @@ over fields **in declaration order**.
 Two-phase startup:
 
 ```zig
-var world = MyWorld.init(allocator, io);  // stores only
+var world = MyWorld.init(allocator); // stores only
 world.initSystems();                     // bind systems to self.stores
 defer world.deinit();
 ```

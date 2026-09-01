@@ -33,17 +33,14 @@ const MoveSystem = struct {
 };
 
 const Systems = struct { move: MoveSystem };
-const GameWorld = ecs.WorldWithGroups(Stores, Systems, Groups);
+const MoversWorld = ecs.WorldWithGroups(Stores, Systems, Groups);
 
 pub fn main() !void {
     var debug_alloc: std.heap.DebugAllocator(.{}) = .init;
     defer _ = debug_alloc.deinit();
     const allocator = debug_alloc.allocator();
 
-    var threaded = std.Io.Threaded.init_single_threaded;
-    defer threaded.deinit();
-
-    var world = GameWorld.init(allocator, threaded.io());
+    var world = MoversWorld.init(allocator);
     world.initSystems();
     defer world.deinit();
 

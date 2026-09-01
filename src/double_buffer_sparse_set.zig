@@ -5,9 +5,9 @@ const EntityIdType = @import("constants.zig").EntityIdType;
 // A double-buffered wrapper around SparseSet.
 //
 // Systems read and write directly to the back buffer each tick.
-// The front buffer is a stable snapshot used by the renderer.
-// At the end of each tick the World calls swap() on each store,
-// which advances back_idx (ping-pong). Systems and renderers
+// The front buffer is a stable snapshot for observers (render, net, tests).
+// At the end of each tick the World calls advance() on each store,
+// which advances back_idx (ping-pong). Systems and observers
 // obtain the current buffer via backBuffer()/frontBuffer().
 pub fn DoubleBufferedSparseSet(comptime T: type) type {
     return struct {
@@ -57,7 +57,7 @@ pub fn DoubleBufferedSparseSet(comptime T: type) type {
 
         // Drains the pending command queue into both buffers, then advances
         // back_idx. Commands are applied in submission order before the flip
-        // so that the new front (visible to the renderer) and new back
+        // so that the new front (visible to observers) and new back
         // (visible to systems next tick) are both up to date.
         pub fn swap(self: *Self) void {
             for (self.pending.items) |cmd| {
@@ -68,6 +68,11 @@ pub fn DoubleBufferedSparseSet(comptime T: type) type {
             }
             self.pending.clearRetainingCapacity();
             self.back_idx ^= 1;
+        }
+
+        /// Duck-typed by World.advanceRingBuffers. Same as swap().
+        pub fn advance(self: *Self) void {
+            self.swap();
         }
 
         // Queue an add command. The value is copied immediately; the insert

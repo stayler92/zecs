@@ -21,14 +21,14 @@ const group_mod = @import("./group.zig");
 //
 // Startup (two-phase — systems take refs into self.stores):
 //
-//   var world = MyWorld.init(allocator, io);  // initialises stores only
-//   world.initSystems();                      // wireGroupHooks + system init
+//   var world = MyWorld.init(allocator);  // initialises stores only
+//   world.initSystems();                  // wireGroupHooks + system init
 //   defer world.deinit();
 //
-// Per ADR-0001, systems declare ComponentStore(T) fields for per-entity
-// component stores and bind them via the concrete store's `.componentStore()`
-// method in `init`. Singleton / InputState / CommandQueues stay as concrete
-// pointers per ADR-0001/0003 exclusions. Full-owning groups bind via
+// Systems declare ComponentStore(T) fields for per-entity component stores
+// and bind them via the concrete store's `.componentStore()` method in
+// `init`. Singleton / InputState / CommandQueues stay as concrete pointers
+// (not vtable-erased). Full-owning groups bind via
 // `world.groupView(.{ .pos, .vel })` in the same phase.
 //
 //   pub const MySystem = struct {
@@ -39,13 +39,12 @@ const group_mod = @import("./group.zig");
 //       pub fn update(self: *@This(), dt: f32) void { ... }
 //   };
 //
-// Game loop (orchestrated by main.zig per ADR-0003; World does not own
-// input or renderer):
+// Typical frame (the orchestrator owns input and any observers; World does not):
 //
-//   try input_src.poll(&world.stores.input_state);
+//   try input_src.poll(&world.stores.input_state); // optional
 //   try world.tick(dt);              // memory-pressure pass + systems.update(dt)
-//   renderer.draw(&world.stores);    // duck-typed, reads stores directly
-//   world.advanceRingBuffers();      // rotates ring buffers per ADR-0002
+//   observer.read(&world.stores);    // renderer, tests, etc. — reads stores directly
+//   world.advanceRingBuffers();      // no-op unless a store declares advance()
 //
 pub fn World(
     comptime Stores: type,
@@ -74,7 +73,6 @@ pub fn WorldWithGroups(
         systems: Systems,
         groups: Runtime,
         allocator: std.mem.Allocator,
-        io: std.Io,
         next_entity: EntityIdType,
         recycled: std.ArrayListUnmanaged(EntityIdType),
         // Per-id generation counter. Index aligns with entity id.
@@ -82,7 +80,7 @@ pub fn WorldWithGroups(
         // destroyEntity to invalidate any pre-capture EntityRef.
         generations: std.ArrayListUnmanaged(GenerationType),
 
-        pub fn init(allocator: std.mem.Allocator, io: std.Io) Self {
+        pub fn init(allocator: std.mem.Allocator) Self {
             var stores: Stores = undefined;
             inline for (store_fields) |field| {
                 @field(stores, field.name) = field.type.init(allocator);
@@ -93,7 +91,6 @@ pub fn WorldWithGroups(
             }
             return .{
                 .allocator = allocator,
-                .io = io,
                 .stores = stores,
                 .systems = systems,
                 .groups = .{},
@@ -158,9 +155,10 @@ pub fn WorldWithGroups(
             }
         }
 
-        // Rotate the write index on every ring-buffered store. Per ADR-0002,
-        // the orchestrator calls this after render and before the next tick.
-        // Stores without an `advance` method are skipped at comptime.
+        // Rotate the write index on every store that declares `advance`
+        // (RingBufferedSparseSet, DoubleBufferedSparseSet). The orchestrator
+        // calls this after observers and before the next tick. Stores without
+        // an `advance` method are skipped at comptime.
         pub fn advanceRingBuffers(self: *Self) void {
             inline for (store_fields) |field| {
                 if (comptime @hasDecl(field.type, "advance")) {
@@ -170,8 +168,8 @@ pub fn WorldWithGroups(
         }
 
         // Pre-tick growth pass. Each store implements its own policy via
-        // tickPressurePass(entity_budget). Stores without it (singletons, intent
-        // queues) are skipped at comptime.
+        // tickPressurePass(entity_budget). Stores without it (singletons,
+        // command queues, input state) are skipped at comptime.
         //
         // entity_budget = next_entity: the count of allocated entity IDs. Stores
         // that must cover the full ID range (DenseSparseSet) use this to extend
@@ -204,13 +202,6 @@ pub fn WorldWithGroups(
                 }
             }
         }
-
-        // // Double-buffering removed. Commented out for potential future use.
-        // pub fn swapAll(self: *Self) void {
-        //     inline for (store_fields) |field| {
-        //         @field(self.stores, field.name).swap();
-        //     }
-        // }
 
         // Allocate a new entity, reusing recycled ids when available. The
         // returned EntityRef carries the current generation for the id;
@@ -298,8 +289,8 @@ pub fn WorldWithGroups(
         //
         // Contract for store types in `Stores`: declare `remove(id)` to
         // opt into per-entity cleanup; omit it to be skipped here. This
-        // is duck-typed via `@hasDecl` so future entity-keyed intent
-        // stores would auto-walk without changes here.
+        // is duck-typed via `@hasDecl` so future entity-keyed stores
+        // auto-walk without changes here.
         //
         // Even with generations, we still eagerly clear here so that
         // sparse-set iteration doesn't walk dead components and storage
@@ -348,11 +339,8 @@ const TestComponentsStores = struct {
 const TestSystems = struct { tracker: TrackingSystem };
 const TestWorld = World(TestComponentsStores, TestSystems);
 
-// test "World - swapAll propagates all stores" — double buffering removed.
-
 test "World - tick calls each system with the correct dt" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     try world.tick(0.016);
@@ -376,8 +364,7 @@ test "World - system writes to store, visible after tick" {
     const Systems = struct { doubler: DoubleHealthSystem };
     const W = World(TestComponentsStores, Systems);
 
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = W.init(testing.allocator, threaded.io());
+    var world = W.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -421,8 +408,7 @@ test "World - system ordering: earlier system writes are visible to later system
     const Systems = struct { add_one: AddOneSystem, mul_ten: MulTenSystem };
     const W = World(Stores, Systems);
 
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = W.init(testing.allocator, threaded.io());
+    var world = W.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -435,8 +421,7 @@ test "World - system ordering: earlier system writes are visible to later system
 }
 
 test "World - createEntity returns sequential IDs at generation 0" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -452,8 +437,7 @@ test "World - createEntity returns sequential IDs at generation 0" {
 }
 
 test "World - destroyEntity recycles id and bumps generation" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -467,8 +451,7 @@ test "World - destroyEntity recycles id and bumps generation" {
 }
 
 test "World - isAlive: fresh ref true, post-destroy false" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -479,8 +462,7 @@ test "World - isAlive: fresh ref true, post-destroy false" {
 }
 
 test "World - isAlive: out-of-range id is false" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     const stale: EntityRef = .{ .id = 999, .gen = 0 };
@@ -488,8 +470,7 @@ test "World - isAlive: out-of-range id is false" {
 }
 
 test "World - destroyEntity is idempotent on stale ref" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -498,8 +479,7 @@ test "World - destroyEntity is idempotent on stale ref" {
 }
 
 test "World - destroyEntity clears components atomically" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -512,8 +492,7 @@ test "World - destroyEntity clears components atomically" {
 }
 
 test "World - getComponent returns the live value, null for stale ref" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -528,8 +507,7 @@ test "World - getComponent returns the live value, null for stale ref" {
 }
 
 test "World - recycled id with new generation does not see prior components" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -547,8 +525,7 @@ test "World - recycled id with new generation does not see prior components" {
 }
 
 test "World - clearEntityComponents removes from all stores (raw id path)" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -562,8 +539,7 @@ test "World - clearEntityComponents removes from all stores (raw id path)" {
 }
 
 test "query: one-component yields every entity with that component" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 100);
     try world.stores.health.insert(2, 200);
@@ -581,8 +557,7 @@ test "query: one-component yields every entity with that component" {
 }
 
 test "query: two-component yields only the intersection, with both pointers" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 10);
     try world.stores.speed.insert(1, 1.5);
@@ -597,8 +572,7 @@ test "query: two-component yields only the intersection, with both pointers" {
 }
 
 test "queryExclude: one include one exclude yields entities with include only if they lack exclude" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 100);
     try world.stores.speed.insert(1, 1.5); // excluded
@@ -612,8 +586,7 @@ test "queryExclude: one include one exclude yields entities with include only if
 }
 
 test "queryExclude: one include two excludes requires entity lacks both" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 10);
     try world.stores.speed.insert(1, 1.5);
@@ -630,8 +603,7 @@ test "queryExclude: one include two excludes requires entity lacks both" {
 }
 
 test "queryExclude: empty exclude list yields identical result to query" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 42);
     try world.stores.health.insert(2, 99);
@@ -653,8 +625,7 @@ test "queryExclude: empty exclude list yields identical result to query" {
 }
 
 test "queryExclude: all included entities filtered by exclude yields empty result" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 100);
     try world.stores.speed.insert(1, 1.5);
@@ -666,8 +637,7 @@ test "queryExclude: all included entities filtered by exclude yields empty resul
 }
 
 test "query: empty world yields null immediately" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
 
     var q = query_mod.query(&world.stores, &.{Health});
@@ -675,8 +645,7 @@ test "query: empty world yields null immediately" {
 }
 
 test "query: components in non-declaration order map correctly" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 42);
     try world.stores.speed.insert(1, 2.5);
@@ -690,8 +659,7 @@ test "query: components in non-declaration order map correctly" {
 }
 
 test "query: smallest-set chosen as driver" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = TestWorld.init(testing.allocator, threaded.io());
+    var world = TestWorld.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 1);
     try world.stores.health.insert(2, 2);
@@ -744,8 +712,7 @@ fn assertPrefixAligned(world: *GroupWorld, expect_size: usize) !void {
 }
 
 test "group: empty Groups world leaves hooks null and dense insert order unchanged" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = EmptyGroupWorld.init(testing.allocator, threaded.io());
+    var world = EmptyGroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -766,8 +733,7 @@ test "group: empty Groups world leaves hooks null and dense insert order unchang
 }
 
 test "group: insert A then B packs; insert only A stays size 0" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -785,8 +751,7 @@ test "group: insert A then B packs; insert only A stays size 0" {
 }
 
 test "group: insert B then A packs the same" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -800,8 +765,7 @@ test "group: insert B then A packs the same" {
 }
 
 test "group: value update on member does not change size or order" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -823,8 +787,7 @@ test "group: value update on member does not change size or order" {
 }
 
 test "group: remove one owned component unpacks; sibling remains outside prefix" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -842,8 +805,7 @@ test "group: remove one owned component unpacks; sibling remains outside prefix"
 }
 
 test "group: two complete members aligned; third incomplete stays outside" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -865,8 +827,7 @@ test "group: two complete members aligned; third incomplete stays outside" {
 }
 
 test "group: unpack member at index 0 when size>1 moves partner on all stores" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -900,8 +861,7 @@ test "group: unpack member at index 0 when size>1 moves partner on all stores" {
 }
 
 test "group: destroyEntity mid-membership fixes size; no ghost ids in prefix" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -940,8 +900,7 @@ test "group: system-shaped bind iterates and mutates via slices" {
     const Systems = struct { move: MoveSystem };
     const W = WorldWithGroups(GroupStores, Systems, MoverGroups);
 
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = W.init(testing.allocator, threaded.io());
+    var world = W.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -954,8 +913,7 @@ test "group: system-shaped bind iterates and mutates via slices" {
 }
 
 test "group: re-derive slices after dense reallocation" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -988,8 +946,7 @@ test "group: re-derive slices after dense reallocation" {
 }
 
 test "group: pack thrash keeps size and prefix entity ids aligned" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -1020,8 +977,7 @@ test "group: pack thrash keeps size and prefix entity ids aligned" {
 }
 
 test "group: clearGroup resets size and clears owned stores" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -1040,8 +996,7 @@ test "group: clearGroup resets size and clears owned stores" {
 }
 
 test "group: hooked store has non-null hook so lone clear would panic" {
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -1076,8 +1031,7 @@ test "group: OOM on second component insert leaves size 0" {
         }
     };
 
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = GroupWorld.init(testing.allocator, threaded.io());
+    var world = GroupWorld.init(testing.allocator);
     world.initSystems();
     defer world.deinit();
 
@@ -1106,12 +1060,40 @@ test "group: OOM on second component insert leaves size 0" {
 
 test "group: World two-arg form is empty Groups (existing call sites)" {
     // World(S, Sy) is the empty-Groups alias — compiles and installs no hooks.
-    var threaded = std.Io.Threaded.init_single_threaded;
-    var world = World(GroupStores, EmptySystems).init(testing.allocator, threaded.io());
+    var world = World(GroupStores, EmptySystems).init(testing.allocator);
     world.initSystems();
     defer world.deinit();
     try testing.expect(world.stores.pos.group_hook == null);
     try testing.expect(world.stores.vel.group_hook == null);
     try world.stores.pos.insert(1, .{ .x = 1, .y = 0 });
     try testing.expectEqual(@as(usize, 1), world.stores.pos.getCount());
+}
+
+test "World.advanceRingBuffers rotates ring and double-buffered stores" {
+    const Ring = @import("./ring_buffered_sparse_set.zig").RingBufferedSparseSet;
+    const Dbl = @import("./double_buffer_sparse_set.zig").DoubleBufferedSparseSet;
+    const Stores = struct {
+        ring: Ring(i32, 2),
+        dbl: Dbl(i32),
+        plain: SparseSet(i32),
+    };
+    const W = World(Stores, struct {});
+    var world = W.init(testing.allocator);
+    defer world.deinit();
+
+    const e = try world.createEntity();
+    try world.stores.ring.insert(e.id, 1);
+    try world.stores.dbl.insert(e.id, 7);
+    try world.stores.plain.insert(e.id, 9);
+
+    const ring_idx0 = world.stores.ring.write_idx;
+    const dbl_idx0 = world.stores.dbl.back_idx;
+
+    world.advanceRingBuffers();
+
+    try testing.expectEqual((ring_idx0 + 1) % 2, world.stores.ring.write_idx);
+    try testing.expectEqual(dbl_idx0 ^ 1, world.stores.dbl.back_idx);
+    try testing.expectEqual(@as(i32, 1), world.stores.ring.getConst(e.id).?.*);
+    try testing.expectEqual(@as(i32, 7), world.stores.dbl.backBuffer().getConst(e.id).?.*);
+    try testing.expectEqual(@as(i32, 9), world.stores.plain.getConst(e.id).?.*);
 }

@@ -36,7 +36,7 @@ const ecs = @import("ecs");
 
 The package name is `zecs`. The module you import is `ecs`.
 
-Requires **Zig 0.16.0** (`std.Io`).
+Requires **Zig 0.16.0**.
 
 ## Quick start
 
@@ -48,7 +48,7 @@ const Stores = struct {
 const Systems = struct { move: MoveSystem };
 const World = ecs.World(Stores, Systems);
 
-var world = World.init(allocator, io);
+var world = World.init(allocator);
 world.initSystems(); // bind after the world value is at its final address
 defer world.deinit();
 

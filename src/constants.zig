@@ -5,8 +5,8 @@ const ComponentStore = @import("component_store.zig").ComponentStore;
 pub const EntityIdType = u32;
 
 /// Generation counter type. Bumped each time an entity id is destroyed so
-/// that references captured before destruction (e.g. across ticks, in input
-/// intent payloads, in UI selection state) can be detected as stale before
+/// that references captured before destruction (across ticks, in command
+/// payloads, in selection state) can be detected as stale before
 /// being applied to a recycled id.
 pub const GenerationType = u32;
 

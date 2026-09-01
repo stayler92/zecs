@@ -24,7 +24,7 @@ same `ComponentStore(T)` vtable.
 | `SparseSet(T)` | `sparse_set.zig` | Hash sparse; default. Optional group hook. |
 | `DenseSparseSet(T)` | `dense_sparse_set.zig` | Flat sparse array; O(1) index; grows with entity id range via pressure pass |
 | `RingBufferedSparseSet(T, N)` | `ring_buffered_sparse_set.zig` | N parallel value arrays; `advance()` rotates write index |
-| `DoubleBufferedSparseSet(T)` | `double_buffer_sparse_set.zig` | Ping-pong + deferred commands; World `swapAll` path is commented out |
+| `DoubleBufferedSparseSet(T)` | `double_buffer_sparse_set.zig` | Ping-pong + deferred commands; `advance()` aliases `swap()` |
 | `SingletonStore(T)` | `singleton_store.zig` | Optional single value; no `remove` |
 | `InputState` | `input_state.zig` | Device snapshot; World-shaped `init`/`deinit` |
 | `CommandQueues(Q)` | `command_queues.zig` | Tick-scoped lists; `clearTickScoped` |

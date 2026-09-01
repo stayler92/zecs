@@ -101,13 +101,18 @@ pub fn RingBufferedSparseSet(comptime T: type, comptime N: usize) type {
             return &self.values[self.write_idx].items[idx];
         }
 
+        pub fn getConst(self: *const Self, entity_id: EntityIdType) ?*const T {
+            const idx = self.sparse.get(entity_id) orelse return null;
+            return &self.values[self.write_idx].items[idx];
+        }
+
         pub fn getCount(self: *const Self) usize {
             return self.entity_ids.items.len;
         }
 
         // Advances the ring: seeds the next write buffer from the current one
         // (so systems can read-modify-write without stale starting state), then
-        // rotates write_idx. Call after render and before the next sim tick.
+        // rotates write_idx. Call after observers and before the next sim tick.
         pub fn advance(self: *Self) void {
             const next = (self.write_idx + 1) % N;
             const src = self.values[self.write_idx].items;
@@ -117,7 +122,7 @@ pub fn RingBufferedSparseSet(comptime T: type, comptime N: usize) type {
             self.write_idx = next;
         }
 
-        // Renderer reads: values from the most recently completed tick.
+        // Observer reads: values from the most recently completed tick.
         pub fn currentSlice(self: *const Self) []const T {
             return self.values[self.write_idx].items;
         }
@@ -195,6 +200,7 @@ test "RingBufferedSparseSet - remove with swap-remove" {
     try testing.expectEqual(@as(usize, 2), s.getCount());
     // entity 3 swap-moved to slot 1
     try testing.expectEqual(@as(i32, 30), s.get(3).?.*);
+    try testing.expectEqual(@as(i32, 30), s.getConst(3).?.*);
 }
 
 test "RingBufferedSparseSet - advance seeds next buffer and rotates write_idx" {
