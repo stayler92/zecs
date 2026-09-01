@@ -1,0 +1,46 @@
+{
+  "name": "zecs",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "username": "vscode",
+      "upgradePackages": false
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postStartCommand": "bash .devcontainer/post-start.sh",
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "ZIG_VERSION": "0.16.0"
+  },
+  "remoteEnv": {
+    "PATH": "/home/vscode/.grok/bin:/home/vscode/.local/bin:${containerEnv:PATH}"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ziglang.vscode-zig"
+      ],
+      "settings": {
+        "zig.path": "/usr/local/bin/zig",
+        "zig.initialSetupDone": true,
+        "zig.buildOnSave": false,
+        "zig.zls.enabled": "on",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ziglang.vscode-zig",
+        "[zig]": {
+          "editor.defaultFormatter": "ziglang.vscode-zig",
+          "editor.formatOnSave": true
+        },
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    },
+    "codespaces": {
+      "openFiles": ["AGENTS.md", "README.md", "src/root.zig"]
+    }
+  }
+}
