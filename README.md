@@ -38,6 +38,33 @@ The package name is `zecs`. The module you import is `ecs`.
 
 Requires **Zig 0.16.0**.
 
+## Codespaces
+
+This repo has a GitHub Codespaces / Dev Containers workspace:
+
+- Ubuntu base image
+- Zig **0.16.0** + ZLS when a matching release exists
+- Grok Build CLI (`grok`)
+- `ziglang.vscode-zig`
+
+[Open in Codespaces](https://codespaces.new/stayler92/zecs?quickstart=1)
+
+Before the first launch, add a Codespaces secret named `XAI_API_KEY` (account
+or repo). If the secret is missing, run `grok login --device-auth` in the
+terminal. If creation fails with `CS_NET_01`, drop VPN/proxy or use another
+network; local Dev Containers is the fallback.
+
+Once the terminal is up:
+
+```sh
+zig version                 # 0.16.0
+zig fmt --check .
+zig build test
+zig build example
+```
+
+Agent instructions live in [`AGENTS.md`](AGENTS.md).
+
 ## Quick start
 
 ```zig
