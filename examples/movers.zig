@@ -15,19 +15,17 @@ const Groups = struct {
 };
 
 const MoveSystem = struct {
-    movers: ecs.FullOwningGroup(Stores, .{ .pos, .vel }) = undefined,
+    movers: ecs.FullOwningGroup(Stores, Groups, .movers) = undefined,
 
     pub fn init(self: *@This(), world: anytype) void {
-        self.movers = world.groupView(.{ .pos, .vel });
+        self.movers = world.groupView(.movers);
     }
 
     pub fn update(self: *@This(), dt: f32) void {
-        const n = self.movers.size();
-        const pos = self.movers.slice(.pos);
-        const vel = self.movers.slice(.vel);
-        for (0..n) |i| {
-            pos[i].x += vel[i].dx * dt;
-            pos[i].y += vel[i].dy * dt;
+        const g = self.movers.groupSlice();
+        for (g.pos, g.vel) |*p, *v| {
+            p.x += v.dx * dt;
+            p.y += v.dy * dt;
         }
     }
 };

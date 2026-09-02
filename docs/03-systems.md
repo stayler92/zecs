@@ -43,15 +43,15 @@ Do not copy World after `init`.
 
 | Data kind | How systems hold it |
 |-----------|---------------------|
-| Multi-field packed set | `FullOwningGroup` via `world.groupView(.{…})` |
+| Multi-field packed set | `FullOwningGroup(Stores, Groups, .name)` via `world.groupView(.name)` |
 | Ungrouped per-entity | `ComponentStore(T)` from `store.componentStore()` |
 | Singletons | `*SingletonStore(T)` into `world.stores` |
 | Commands / input | `*CommandQueues` / `*InputState` |
 | Generations / entity alloc | pointers into `World` fields |
 
-Hot paths re-derive `size` + `slice` every `update` (never cache dense slices
-from `init`). Do not zip independent `denseSlice()` lengths with `@min` for
-co-owned group fields — use the group prefix.
+Hot paths call `groupSlice()` every `update` (never cache those slices from
+`init`). Do not zip `denseSlice()` of group-owned stores — that is the full
+dense array, suffix included. Use `groupSlice()` for the packed prefix.
 
 Producer-before-handler is enforced only by field order.
 
@@ -74,8 +74,7 @@ draining. Each drain step passes `interval` as dt. Debug builds expose
 
 `query` / `queryExclude` walk SparseSet / DenseSparseSet intersections and
 yield `{ entity, c0, c1, ... }` records. They are implemented and tested;
-hot paths that already have a full-owning group should use the group prefix
-instead.
+hot paths that already have a full-owning group should use `groupSlice()`.
 
 ## Related
 

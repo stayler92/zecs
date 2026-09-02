@@ -125,66 +125,66 @@ fn isSparseSetType(comptime StoreType: type) bool {
 }
 
 // ---------------------------------------------------------------------------
-// Field-name set matching (for groupView)
+// Group name lookup (for groupView)
 // ---------------------------------------------------------------------------
 
-fn sortedNames(comptime names: []const []const u8) [names.len][]const u8 {
-    var out: [names.len][]const u8 = undefined;
-    @memcpy(&out, names);
-    // Simple insertion sort (comptime, tiny N)
-    var i: usize = 1;
-    while (i < out.len) : (i += 1) {
-        var j = i;
-        while (j > 0 and std.mem.order(u8, out[j - 1], out[j]) == .gt) {
-            const tmp = out[j - 1];
-            out[j - 1] = out[j];
-            out[j] = tmp;
-            j -= 1;
-        }
-    }
-    return out;
-}
-
-fn nameSetsEqual(comptime a: []const []const u8, comptime b: []const []const u8) bool {
-    if (a.len != b.len) return false;
-    const sa = sortedNames(a);
-    const sb = sortedNames(b);
-    inline for (0..a.len) |i| {
-        if (!std.mem.eql(u8, sa[i], sb[i])) return false;
-    }
-    return true;
-}
-
-/// Index of the declared Groups field whose owned set matches `fields`, or null.
-pub fn findGroupIndex(comptime Groups: type, comptime fields: anytype) ?usize {
-    const want = extractFieldNames(fields);
+/// Index of the declared Groups field named `name`, or null.
+pub fn findGroupIndexByName(comptime Groups: type, comptime name: []const u8) ?usize {
     const g_fields = @typeInfo(Groups).@"struct".fields;
     inline for (g_fields, 0..) |gfield, i| {
-        if (@hasDecl(gfield.type, "owned_fields")) {
-            if (nameSetsEqual(gfield.type.owned_fields, want)) return i;
-        }
+        if (comptime std.mem.eql(u8, gfield.name, name)) return i;
     }
     return null;
 }
 
+fn ownedFieldsCollideWithEntities(comptime names: []const []const u8) bool {
+    inline for (names) |fname| {
+        if (comptime std.mem.eql(u8, fname, "entities")) return true;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
-// FullOwningGroup view — re-derives slices every call (R2)
+// FullOwningGroup view — groupSlice re-derives all prefixes in one size read
 // ---------------------------------------------------------------------------
 
 /// System-facing view over a full-owning group. Holds non-owning `*Stores` and
-/// a pointer to the runtime size. `slice` / `entities` re-derive every call so
-/// dense reallocation cannot leave stale slices.
-pub fn FullOwningGroup(comptime Stores: type, comptime fields: anytype) type {
-    const names = extractFieldNames(fields);
-    if (names.len < 2) {
-        @compileError("FullOwningGroup requires at least 2 field names");
+/// a pointer to the runtime size. `groupSlice` captures size once so every
+/// returned dense prefix has the same length.
+pub fn FullOwningGroup(comptime Stores: type, comptime Groups: type, comptime group: anytype) type {
+    const group_name = @tagName(group);
+    if (!@hasField(Groups, group_name)) {
+        @compileError("FullOwningGroup: Groups has no field '" ++ group_name ++ "'");
     }
-    // Validate fields exist on Stores
+    const Marker = @FieldType(Groups, group_name);
+    if (!@hasDecl(Marker, "is_full_owning_group") or !@hasDecl(Marker, "owned_fields")) {
+        @compileError("FullOwningGroup: '" ++ group_name ++ "' must be FullOwning(...)");
+    }
+    const names = Marker.owned_fields;
+    if (comptime ownedFieldsCollideWithEntities(names)) {
+        @compileError("FullOwningGroup: owned field name 'entities' collides with groupSlice().entities");
+    }
     inline for (names) |fname| {
         if (!@hasField(Stores, fname)) {
             @compileError("FullOwningGroup: Stores has no field '" ++ fname ++ "'");
         }
     }
+
+    const Slice = blk: {
+        const n_fields = names.len + 1;
+        var field_names: [n_fields][]const u8 = undefined;
+        var field_types: [n_fields]type = undefined;
+        var field_attrs: [n_fields]std.builtin.Type.StructField.Attributes = undefined;
+        field_names[0] = "entities";
+        field_types[0] = []EntityIdType;
+        field_attrs[0] = .{};
+        for (names, 0..) |fname, i| {
+            field_names[i + 1] = fname;
+            field_types[i + 1] = []@FieldType(Stores, fname).Elem;
+            field_attrs[i + 1] = .{};
+        }
+        break :blk @Struct(.auto, null, &field_names, &field_types, &field_attrs);
+    };
 
     return struct {
         const Self = @This();
@@ -197,56 +197,22 @@ pub fn FullOwningGroup(comptime Stores: type, comptime fields: anytype) type {
             return self.size_ptr.*;
         }
 
-        /// Component slice for a group field; length == size(). Re-derived.
-        pub fn slice(self: Self, comptime field: anytype) []ElemOf(Stores, field) {
-            const fname = @tagName(field);
-            comptime {
-                if (!fieldInGroup(fname, names)) {
-                    @compileError("FullOwningGroup.slice: field not in group");
-                }
+        /// Packed prefix of every owned store plus entity ids. Size is read
+        /// once; all slices have that length. Re-derived each call.
+        pub fn groupSlice(self: Self) Slice {
+            const n = self.size();
+            var out: Slice = undefined;
+            const first = &@field(self.stores.*, names[0]);
+            std.debug.assert(n <= first.entity_ids.items.len);
+            out.entities = first.entity_ids.items[0..n];
+            inline for (names) |fname| {
+                const store = &@field(self.stores.*, fname);
+                std.debug.assert(n <= store.values.items.len);
+                @field(out, fname) = store.values.items[0..n];
             }
-            const store = &@field(self.stores.*, fname);
-            const n = self.size();
-            std.debug.assert(n <= store.values.items.len);
-            return store.values.items[0..n];
-        }
-
-        /// Entity-id prefix for the group (aligned across all owned stores).
-        /// Taken from the first owned field; re-derived each call.
-        pub fn entities(self: Self) []EntityIdType {
-            const store = &@field(self.stores.*, names[0]);
-            const n = self.size();
-            std.debug.assert(n <= store.entity_ids.items.len);
-            return store.entity_ids.items[0..n];
-        }
-
-        /// Entity-id prefix for a specific owned field (same ids as `entities()`
-        /// while the invariant holds).
-        pub fn entitiesOf(self: Self, comptime field: anytype) []EntityIdType {
-            const fname = @tagName(field);
-            comptime {
-                if (!fieldInGroup(fname, names)) {
-                    @compileError("FullOwningGroup.entitiesOf: field not in group");
-                }
-            }
-            const store = &@field(self.stores.*, fname);
-            const n = self.size();
-            std.debug.assert(n <= store.entity_ids.items.len);
-            return store.entity_ids.items[0..n];
+            return out;
         }
     };
-}
-
-fn fieldInGroup(comptime fname: []const u8, comptime names: []const []const u8) bool {
-    inline for (names) |n| {
-        if (std.mem.eql(u8, n, fname)) return true;
-    }
-    return false;
-}
-
-fn ElemOf(comptime Stores: type, comptime field: anytype) type {
-    const StoreType = @FieldType(Stores, @tagName(field));
-    return StoreType.Elem;
 }
 
 // ---------------------------------------------------------------------------
@@ -501,17 +467,25 @@ test "validateGroupsMessage - unknown field rejected" {
     try testing.expect(std.mem.indexOf(u8, msg.?, "unknown") != null);
 }
 
-test "findGroupIndex - matches field-name set regardless of order" {
+test "ownedFieldsCollideWithEntities - rejects entities store name" {
+    try testing.expect(ownedFieldsCollideWithEntities(&.{ "pos", "entities" }));
+    try testing.expect(!ownedFieldsCollideWithEntities(&.{ "pos", "vel" }));
+}
+
+test "findGroupIndexByName - matches Groups field name" {
     const Groups = struct {
         movers: FullOwning(.{ .pos, .vel }),
     };
-    const idx = comptime findGroupIndex(Groups, .{ .vel, .pos });
+    const idx = comptime findGroupIndexByName(Groups, "movers");
     try testing.expectEqual(@as(?usize, 0), idx);
-    const miss = comptime findGroupIndex(Groups, .{ .pos, .sprite });
+    const miss = comptime findGroupIndexByName(Groups, "renderables");
     try testing.expect(miss == null);
 }
 
-test "FullOwningGroup - slice lengths equal size and re-derive" {
+test "FullOwningGroup - groupSlice lengths equal size and re-derive" {
+    const Groups = struct {
+        movers: FullOwning(.{ .pos, .vel }),
+    };
     var stores: TestStores = .{
         .pos = SparseSet(Pos).init(testing.allocator),
         .vel = SparseSet(Vel).init(testing.allocator),
@@ -524,7 +498,7 @@ test "FullOwningGroup - slice lengths equal size and re-derive" {
     }
 
     var size: usize = 0;
-    const View = FullOwningGroup(TestStores, .{ .pos, .vel });
+    const View = FullOwningGroup(TestStores, Groups, .movers);
     const view: View = .{ .stores = &stores, .size_ptr = &size };
 
     try stores.pos.insert(1, .{ .x = 1, .y = 2 });
@@ -532,14 +506,14 @@ test "FullOwningGroup - slice lengths equal size and re-derive" {
     // Manually pack for unit test of the view only.
     size = 1;
 
+    const g = view.groupSlice();
     try testing.expectEqual(@as(usize, 1), view.size());
-    try testing.expectEqual(@as(usize, 1), view.slice(.pos).len);
-    try testing.expectEqual(@as(usize, 1), view.slice(.vel).len);
-    try testing.expectEqual(@as(usize, 1), view.entities().len);
-    try testing.expectEqual(@as(f32, 1), view.slice(.pos)[0].x);
-    try testing.expectEqual(@as(f32, 3), view.slice(.vel)[0].dx);
+    try testing.expectEqual(@as(usize, 1), g.pos.len);
+    try testing.expectEqual(@as(usize, 1), g.vel.len);
+    try testing.expectEqual(@as(usize, 1), g.entities.len);
+    try testing.expectEqual(@as(f32, 1), g.pos[0].x);
+    try testing.expectEqual(@as(f32, 3), g.vel[0].dx);
 
-    // Mutate via slice
-    view.slice(.pos)[0].x = 99;
+    view.groupSlice().pos[0].x = 99;
     try testing.expectEqual(@as(f32, 99), stores.pos.getConst(1).?.x);
 }

@@ -12,6 +12,14 @@ const Groups = struct {
 const World = ecs.WorldWithGroups(Stores, Systems, Groups);
 ```
 
+The owned field set is written only on `FullOwning`. Systems name the group:
+
+```zig
+movers: ecs.FullOwningGroup(Stores, Groups, .movers) = undefined,
+// in init:
+self.movers = world.groupView(.movers);
+```
+
 | Rule | Detail |
 |------|--------|
 | Membership | Immediate pack on structural insert when entity has all owned fields; unpack before remove |
@@ -20,8 +28,9 @@ const World = ecs.WorldWithGroups(Stores, Systems, Groups);
 | SparseSet only | Non-`SparseSet` members rejected at comptime |
 | Hook wiring | In `World.init` only (live `*Self`) |
 | Value-only insert | Updates value; does **not** fire hooks or change size |
-| Views | `slice` / `entities` re-derive every call; never cache `[]T` from `init` |
+| Views | `groupSlice` re-derives every call (one size read); never cache slices from `init` |
 | Bulk clear | `world.clearGroup(.movers)` — not lone `SparseSet.clear` on owned fields |
+| Address | `groupView` / `clearGroup` take the Groups field name (`.movers`) |
 
 ## Load order (mandatory)
 
@@ -31,13 +40,13 @@ before `init` are use-after-undefined.
 ## Iteration
 
 ```zig
-const view = world.groupView(.{ .pos, .vel }); // field-name set; order independent
-const n = view.size();
-const pos = view.slice(.pos); // []Position, len n — re-derived each call
-for (0..n) |i| { /* … */ }
+const g = view.groupSlice(); // entities, pos, vel — same length
+for (g.pos, g.vel) |*p, *v| { /* … */ }
 ```
 
-`World.GroupView(.{ .pos, .vel })` is the type alias systems store after bind.
+`groupSlice` captures `size()` once. Do not zip `ComponentStore.denseSlice()`
+of group-owned stores — that is the full dense array, including incomplete
+members.
 
 ## Related
 

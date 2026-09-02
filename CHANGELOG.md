@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [SemVer](https://semver.org/). **0.x is unstable**: the
 public API may change without a major bump. Pin consumers to a tag.
 
+## [0.1.3] — 2026-09-02
+
+### Changed
+
+- Full-owning groups are addressed by Groups field name: `world.groupView(.movers)`
+  matches `world.clearGroup(.movers)`.
+- `FullOwningGroup(Stores, Groups, .movers)` — the owned field set is written
+  only on `FullOwning`.
+- Iteration is `groupSlice()` (one size read; packed prefixes + entity ids).
+  `slice` / `entities` / `entitiesOf` and `World.GroupView` are removed.
+- `GroupRuntime`, `validateGroups`, `validateGroupsMessage`, `findGroupIndex`,
+  and `SparseSetGroupSorter` are no longer re-exported from the `ecs` module.
+
 ## [0.1.2] — 2026-09-02
 
 ### Changed
@@ -60,6 +73,7 @@ Initial extract of the raw ECS from
   an ANSI renderer. Planned for 0.2; see [docs/roadmap.md](docs/roadmap.md).
 - Renderer, game systems, templates, HUD.
 
+[0.1.3]: https://github.com/stayler92/zecs/releases/tag/0.1.3
 [0.1.2]: https://github.com/stayler92/zecs/releases/tag/0.1.2
 [0.1.1]: https://github.com/stayler92/zecs/releases/tag/0.1.1
 [0.1.0]: https://github.com/stayler92/zecs/releases/tag/0.1.0

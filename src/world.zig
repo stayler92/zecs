@@ -31,7 +31,7 @@ const group_mod = @import("./group.zig");
 // and bind them via the concrete store's `.componentStore()` method in
 // `init`. Singleton / InputState / CommandQueues stay as concrete pointers
 // (not vtable-erased). Full-owning groups bind via
-// `world.groupView(.{ .pos, .vel })` in the same phase.
+// `world.groupView(.movers)` in the same phase.
 //
 //   pub const MySystem = struct {
 //       things: ComponentStore(Thing) = undefined,
@@ -120,11 +120,11 @@ pub fn WorldWithGroups(
             }
         }
 
-        /// View over a declared full-owning group. Field set must match a
-        /// Groups entry by owned field-name set (order independent).
-        pub fn groupView(self: *Self, comptime fields: anytype) group_mod.FullOwningGroup(Stores, fields) {
-            const gi = comptime group_mod.findGroupIndex(Groups, fields) orelse {
-                @compileError("groupView: no declared FullOwning group matches the given field set");
+        /// View over a declared full-owning group, addressed by Groups field name.
+        pub fn groupView(self: *Self, comptime group: anytype) group_mod.FullOwningGroup(Stores, Groups, group) {
+            const name = @tagName(group);
+            const gi = comptime group_mod.findGroupIndexByName(Groups, name) orelse {
+                @compileError("groupView: unknown group '" ++ name ++ "'");
             };
             return .{
                 .stores = &self.stores,
@@ -144,11 +144,6 @@ pub fn WorldWithGroups(
                 }
             }
             @compileError("clearGroup: unknown group name '" ++ name ++ "'");
-        }
-
-        /// Typed group view helper for systems that know Stores + field set.
-        pub fn GroupView(comptime fields: anytype) type {
-            return group_mod.FullOwningGroup(Stores, fields);
         }
 
         pub fn deinit(self: *Self) void {
@@ -723,14 +718,15 @@ const GroupWorld = WorldWithGroups(GroupStores, EmptySystems, MoverGroups);
 const EmptyGroupWorld = World(GroupStores, EmptySystems);
 
 fn assertPrefixAligned(world: *GroupWorld, expect_size: usize) !void {
-    const view = world.groupView(.{ .pos, .vel });
+    const view = world.groupView(.movers);
     try testing.expectEqual(expect_size, view.size());
-    const e_pos = view.entitiesOf(.pos);
-    const e_vel = view.entitiesOf(.vel);
-    try testing.expectEqual(expect_size, e_pos.len);
-    try testing.expectEqual(expect_size, e_vel.len);
+    const g = view.groupSlice();
+    try testing.expectEqual(expect_size, g.entities.len);
+    try testing.expectEqual(expect_size, g.pos.len);
+    try testing.expectEqual(expect_size, g.vel.len);
     for (0..expect_size) |i| {
-        try testing.expectEqual(e_pos[i], e_vel[i]);
+        try testing.expectEqual(g.entities[i], world.stores.pos.entity_ids.items[i]);
+        try testing.expectEqual(g.entities[i], world.stores.vel.entity_ids.items[i]);
     }
 }
 
@@ -770,7 +766,7 @@ test "group: insert A then B packs; insert only A stays size 0" {
 
     try world.stores.vel.insert(e.id, .{ .dx = 3, .dy = 4 });
     try assertPrefixAligned(&world, 1);
-    try testing.expectEqual(e.id, world.groupView(.{ .pos, .vel }).entities()[0]);
+    try testing.expectEqual(e.id, world.groupView(.movers).groupSlice().entities[0]);
 }
 
 test "group: insert B then A packs the same" {
@@ -845,7 +841,7 @@ test "group: two complete members aligned; third incomplete stays outside" {
     try testing.expectEqual(@as(usize, 3), world.stores.pos.getCount());
     try testing.expectEqual(@as(usize, 2), world.stores.vel.getCount());
     // e2 not in prefix
-    const ents = world.groupView(.{ .pos, .vel }).entities();
+    const ents = world.groupView(.movers).groupSlice().entities;
     try testing.expect(ents[0] != e2.id and ents[1] != e2.id);
 }
 
@@ -876,7 +872,7 @@ test "group: unpack member at index 0 when size>1 moves partner on all stores" {
     try testing.expect(world.stores.vel.has(e1.id));
     try testing.expect(world.stores.vel.has(e2.id));
 
-    const ents = world.groupView(.{ .pos, .vel }).entities();
+    const ents = world.groupView(.movers).groupSlice().entities;
     try testing.expectEqual(@as(usize, 2), ents.len);
     for (ents) |id| {
         try testing.expect(id == e1.id or id == e2.id);
@@ -900,23 +896,20 @@ test "group: destroyEntity mid-membership fixes size; no ghost ids in prefix" {
     try assertPrefixAligned(&world, 1);
     try testing.expect(!world.stores.pos.has(e0.id));
     try testing.expect(!world.stores.vel.has(e0.id));
-    try testing.expectEqual(e1.id, world.groupView(.{ .pos, .vel }).entities()[0]);
+    try testing.expectEqual(e1.id, world.groupView(.movers).groupSlice().entities[0]);
 }
 
-test "group: system-shaped bind iterates and mutates via slices" {
+test "group: system-shaped bind iterates and mutates via groupSlice" {
     const MoveSystem = struct {
-        movers: GroupWorld.GroupView(.{ .pos, .vel }) = undefined,
+        movers: group_mod.FullOwningGroup(GroupStores, MoverGroups, .movers) = undefined,
         pub fn init(self: *@This(), world: anytype) void {
-            self.movers = world.groupView(.{ .pos, .vel });
+            self.movers = world.groupView(.movers);
         }
         pub fn update(self: *@This(), dt: f32) void {
-            const n = self.movers.size();
-            const pos = self.movers.slice(.pos);
-            const vel = self.movers.slice(.vel);
-            std.debug.assert(pos.len == n and vel.len == n);
-            for (0..n) |i| {
-                pos[i].x += vel[i].dx * dt;
-                pos[i].y += vel[i].dy * dt;
+            const g = self.movers.groupSlice();
+            for (g.pos, g.vel) |*p, *v| {
+                p.x += v.dx * dt;
+                p.y += v.dy * dt;
             }
         }
     };
@@ -950,16 +943,15 @@ test "group: re-derive slices after dense reallocation" {
     }
     try assertPrefixAligned(&world, 64);
 
-    const view = world.groupView(.{ .pos, .vel });
+    const view = world.groupView(.movers);
+    const g = view.groupSlice();
     try testing.expectEqual(@as(usize, 64), view.size());
-    try testing.expectEqual(@as(usize, 64), view.slice(.pos).len);
-    try testing.expectEqual(@as(usize, 64), view.slice(.vel).len);
-    try testing.expectEqual(@as(usize, 64), view.entities().len);
-    // Spot-check values still correct after growth
-    try testing.expectEqual(@as(f32, 0), view.slice(.pos)[0].x);
-    // Find entity 63 in prefix and check
+    try testing.expectEqual(@as(usize, 64), g.pos.len);
+    try testing.expectEqual(@as(usize, 64), g.vel.len);
+    try testing.expectEqual(@as(usize, 64), g.entities.len);
+    try testing.expectEqual(@as(f32, 0), g.pos[0].x);
     var found63 = false;
-    for (view.entities(), view.slice(.pos)) |eid, p| {
+    for (g.entities, g.pos) |eid, p| {
         if (eid == ids[63]) {
             try testing.expectEqual(@as(f32, 63), p.x);
             found63 = true;

@@ -17,15 +17,10 @@ pub const GroupHook = @import("sparse_set.zig").GroupHook;
 
 pub const FullOwning = @import("group.zig").FullOwning;
 pub const FullOwningGroup = @import("group.zig").FullOwningGroup;
-pub const GroupRuntime = @import("group.zig").GroupRuntime;
-pub const validateGroups = @import("group.zig").validateGroups;
-pub const validateGroupsMessage = @import("group.zig").validateGroupsMessage;
-pub const findGroupIndex = @import("group.zig").findGroupIndex;
 
 pub const DenseSparseSet = @import("dense_sparse_set.zig").DenseSparseSet;
 pub const RingBufferedSparseSet = @import("ring_buffered_sparse_set.zig").RingBufferedSparseSet;
 pub const DoubleBufferedSparseSet = @import("double_buffer_sparse_set.zig").DoubleBufferedSparseSet;
-pub const SparseSetGroupSorter = @import("sparse_set_sort.zig").SparseSetGroupSorter;
 
 pub const ComponentStore = @import("component_store.zig").ComponentStore;
 pub const sparseSetStore = @import("component_store.zig").sparseSetStore;
@@ -52,4 +47,6 @@ pub const Metrics = @import("throttled_system.zig").Metrics;
 
 test {
     std.testing.refAllDecls(@This());
+    _ = @import("sparse_set_sort.zig");
+    _ = @import("group.zig");
 }

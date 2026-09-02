@@ -18,7 +18,7 @@ IdleGenerator still vendors its own copy; a consume PR is a follow-up.
 
 ```zig
 // build.zig.zon — after:
-//   zig fetch --save git+https://github.com/stayler92/zecs#0.1.2
+//   zig fetch --save git+https://github.com/stayler92/zecs#0.1.3
 ```
 
 ```zig
@@ -133,13 +133,15 @@ const Groups = struct {
 };
 const World = ecs.WorldWithGroups(Stores, Systems, Groups);
 
-// in system init:
-self.movers = world.groupView(.{ .pos, .vel });
+// system field:
+movers: ecs.FullOwningGroup(Stores, Groups, .movers) = undefined,
 
-// in update — re-derive every tick, never cache the slice:
-const n = self.movers.size();
-const pos = self.movers.slice(.pos);
-const vel = self.movers.slice(.vel);
+// in system init:
+self.movers = world.groupView(.movers);
+
+// in update — re-derive every tick, never cache the slices:
+const g = self.movers.groupSlice();
+for (g.pos, g.vel) |*p, *v| { ... }
 ```
 
 Load order: `init` (hooks) → `createEntity` + inserts.
