@@ -1,6 +1,6 @@
 # Overview
 
-As-is description of **zecs 0.1.1**, grounded in `src/` and `build.zig`.
+As-is description of **zecs 0.1.2**, grounded in `src/` and `build.zig`.
 These docs describe what the code does today, not design aspirations.
 
 ## Layout

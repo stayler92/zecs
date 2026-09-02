@@ -18,7 +18,7 @@ IdleGenerator still vendors its own copy; a consume PR is a follow-up.
 
 ```zig
 // build.zig.zon — after:
-//   zig fetch --save git+https://github.com/stayler92/zecs#0.1.1
+//   zig fetch --save git+https://github.com/stayler92/zecs#0.1.2
 ```
 
 ```zig
