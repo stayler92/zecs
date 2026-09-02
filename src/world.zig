@@ -19,11 +19,13 @@ const group_mod = @import("./group.zig");
 //   Groups  - struct of FullOwning(.{ .field, ... }) markers (default empty).
 //             Both are fully known at comptime; no vtables, no allocator.
 //
-// Startup (two-phase — systems take refs into self.stores):
+// Startup (in-place — systems take refs into self.stores):
 //
-//   var world = MyWorld.init(allocator);  // initialises stores only
-//   world.initSystems();                  // wireGroupHooks + system init
+//   var world: MyWorld = undefined;
+//   world.init(allocator);  // stores + wireGroupHooks + system init
 //   defer world.deinit();
+//
+// Do not copy World after init.
 //
 // Systems declare ComponentStore(T) fields for per-entity component stores
 // and bind them via the concrete store's `.componentStore()` method in
@@ -80,7 +82,9 @@ pub fn WorldWithGroups(
         // destroyEntity to invalidate any pre-capture EntityRef.
         generations: std.ArrayListUnmanaged(GenerationType),
 
-        pub fn init(allocator: std.mem.Allocator) Self {
+        // Construct stores into this live Self, then bind hooks + system
+        // pointers. Do not copy World after init.
+        pub fn init(self: *Self, allocator: std.mem.Allocator) void {
             var stores: Stores = undefined;
             inline for (store_fields) |field| {
                 @field(stores, field.name) = field.type.init(allocator);
@@ -89,7 +93,7 @@ pub fn WorldWithGroups(
             inline for (sys_fields) |field| {
                 @field(systems, field.name) = .{};
             }
-            return .{
+            self.* = .{
                 .allocator = allocator,
                 .stores = stores,
                 .systems = systems,
@@ -98,15 +102,15 @@ pub fn WorldWithGroups(
                 .recycled = .empty,
                 .generations = .empty,
             };
+            self.bind();
         }
 
-        // Bind group hooks + system store pointers to self.stores. Call after
-        // world is at its final memory address (i.e. after any struct moves /
-        // returns). Hooks must not be installed in by-value init (R3).
+        // Bind group hooks + system store pointers to self.stores. Only after
+        // self.* is the caller's live World (no further moves).
         //
         // Each system receives the world pointer (anytype) so it can access
         // both world.stores and world-level fields (generations, etc.) in one call.
-        pub fn initSystems(self: *Self) void {
+        fn bind(self: *Self) void {
             self.groups.stores = &self.stores;
             self.groups.wireHooks();
             inline for (sys_fields) |field| {
@@ -340,7 +344,8 @@ const TestSystems = struct { tracker: TrackingSystem };
 const TestWorld = World(TestComponentsStores, TestSystems);
 
 test "World - tick calls each system with the correct dt" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     try world.tick(0.016);
@@ -364,8 +369,8 @@ test "World - system writes to store, visible after tick" {
     const Systems = struct { doubler: DoubleHealthSystem };
     const W = World(TestComponentsStores, Systems);
 
-    var world = W.init(testing.allocator);
-    world.initSystems();
+    var world: W = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const h1: Health = 10;
@@ -408,8 +413,8 @@ test "World - system ordering: earlier system writes are visible to later system
     const Systems = struct { add_one: AddOneSystem, mul_ten: MulTenSystem };
     const W = World(Stores, Systems);
 
-    var world = W.init(testing.allocator);
-    world.initSystems();
+    var world: W = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const h5: Health = 5;
@@ -421,7 +426,8 @@ test "World - system ordering: earlier system writes are visible to later system
 }
 
 test "World - createEntity returns sequential IDs at generation 0" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -437,7 +443,8 @@ test "World - createEntity returns sequential IDs at generation 0" {
 }
 
 test "World - destroyEntity recycles id and bumps generation" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -451,7 +458,8 @@ test "World - destroyEntity recycles id and bumps generation" {
 }
 
 test "World - isAlive: fresh ref true, post-destroy false" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -462,7 +470,8 @@ test "World - isAlive: fresh ref true, post-destroy false" {
 }
 
 test "World - isAlive: out-of-range id is false" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const stale: EntityRef = .{ .id = 999, .gen = 0 };
@@ -470,7 +479,8 @@ test "World - isAlive: out-of-range id is false" {
 }
 
 test "World - destroyEntity is idempotent on stale ref" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -479,7 +489,8 @@ test "World - destroyEntity is idempotent on stale ref" {
 }
 
 test "World - destroyEntity clears components atomically" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -492,7 +503,8 @@ test "World - destroyEntity clears components atomically" {
 }
 
 test "World - getComponent returns the live value, null for stale ref" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -507,7 +519,8 @@ test "World - getComponent returns the live value, null for stale ref" {
 }
 
 test "World - recycled id with new generation does not see prior components" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -525,7 +538,8 @@ test "World - recycled id with new generation does not see prior components" {
 }
 
 test "World - clearEntityComponents removes from all stores (raw id path)" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -539,7 +553,8 @@ test "World - clearEntityComponents removes from all stores (raw id path)" {
 }
 
 test "query: one-component yields every entity with that component" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 100);
     try world.stores.health.insert(2, 200);
@@ -557,7 +572,8 @@ test "query: one-component yields every entity with that component" {
 }
 
 test "query: two-component yields only the intersection, with both pointers" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 10);
     try world.stores.speed.insert(1, 1.5);
@@ -572,7 +588,8 @@ test "query: two-component yields only the intersection, with both pointers" {
 }
 
 test "queryExclude: one include one exclude yields entities with include only if they lack exclude" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 100);
     try world.stores.speed.insert(1, 1.5); // excluded
@@ -586,7 +603,8 @@ test "queryExclude: one include one exclude yields entities with include only if
 }
 
 test "queryExclude: one include two excludes requires entity lacks both" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 10);
     try world.stores.speed.insert(1, 1.5);
@@ -603,7 +621,8 @@ test "queryExclude: one include two excludes requires entity lacks both" {
 }
 
 test "queryExclude: empty exclude list yields identical result to query" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 42);
     try world.stores.health.insert(2, 99);
@@ -625,7 +644,8 @@ test "queryExclude: empty exclude list yields identical result to query" {
 }
 
 test "queryExclude: all included entities filtered by exclude yields empty result" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 100);
     try world.stores.speed.insert(1, 1.5);
@@ -637,7 +657,8 @@ test "queryExclude: all included entities filtered by exclude yields empty resul
 }
 
 test "query: empty world yields null immediately" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     var q = query_mod.query(&world.stores, &.{Health});
@@ -645,7 +666,8 @@ test "query: empty world yields null immediately" {
 }
 
 test "query: components in non-declaration order map correctly" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 42);
     try world.stores.speed.insert(1, 2.5);
@@ -659,7 +681,8 @@ test "query: components in non-declaration order map correctly" {
 }
 
 test "query: smallest-set chosen as driver" {
-    var world = TestWorld.init(testing.allocator);
+    var world: TestWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
     try world.stores.health.insert(1, 1);
     try world.stores.health.insert(2, 2);
@@ -712,8 +735,8 @@ fn assertPrefixAligned(world: *GroupWorld, expect_size: usize) !void {
 }
 
 test "group: empty Groups world leaves hooks null and dense insert order unchanged" {
-    var world = EmptyGroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: EmptyGroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     try testing.expect(world.stores.pos.group_hook == null);
@@ -733,8 +756,8 @@ test "group: empty Groups world leaves hooks null and dense insert order unchang
 }
 
 test "group: insert A then B packs; insert only A stays size 0" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     try testing.expect(world.stores.pos.group_hook != null);
@@ -751,8 +774,8 @@ test "group: insert A then B packs; insert only A stays size 0" {
 }
 
 test "group: insert B then A packs the same" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -765,8 +788,8 @@ test "group: insert B then A packs the same" {
 }
 
 test "group: value update on member does not change size or order" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -787,8 +810,8 @@ test "group: value update on member does not change size or order" {
 }
 
 test "group: remove one owned component unpacks; sibling remains outside prefix" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -805,8 +828,8 @@ test "group: remove one owned component unpacks; sibling remains outside prefix"
 }
 
 test "group: two complete members aligned; third incomplete stays outside" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -827,8 +850,8 @@ test "group: two complete members aligned; third incomplete stays outside" {
 }
 
 test "group: unpack member at index 0 when size>1 moves partner on all stores" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -861,8 +884,8 @@ test "group: unpack member at index 0 when size>1 moves partner on all stores" {
 }
 
 test "group: destroyEntity mid-membership fixes size; no ghost ids in prefix" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e0 = try world.createEntity();
@@ -900,8 +923,8 @@ test "group: system-shaped bind iterates and mutates via slices" {
     const Systems = struct { move: MoveSystem };
     const W = WorldWithGroups(GroupStores, Systems, MoverGroups);
 
-    var world = W.init(testing.allocator);
-    world.initSystems();
+    var world: W = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -913,8 +936,8 @@ test "group: system-shaped bind iterates and mutates via slices" {
 }
 
 test "group: re-derive slices after dense reallocation" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     // Force multiple capacity growths by inserting many complete members.
@@ -946,8 +969,8 @@ test "group: re-derive slices after dense reallocation" {
 }
 
 test "group: pack thrash keeps size and prefix entity ids aligned" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     var entities: [16]EntityRef = undefined;
@@ -977,8 +1000,8 @@ test "group: pack thrash keeps size and prefix entity ids aligned" {
 }
 
 test "group: clearGroup resets size and clears owned stores" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -996,8 +1019,8 @@ test "group: clearGroup resets size and clears owned stores" {
 }
 
 test "group: hooked store has non-null hook so lone clear would panic" {
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     try testing.expect(world.stores.pos.group_hook != null);
@@ -1031,8 +1054,8 @@ test "group: OOM on second component insert leaves size 0" {
         }
     };
 
-    var world = GroupWorld.init(testing.allocator);
-    world.initSystems();
+    var world: GroupWorld = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();
@@ -1060,8 +1083,8 @@ test "group: OOM on second component insert leaves size 0" {
 
 test "group: World two-arg form is empty Groups (existing call sites)" {
     // World(S, Sy) is the empty-Groups alias — compiles and installs no hooks.
-    var world = World(GroupStores, EmptySystems).init(testing.allocator);
-    world.initSystems();
+    var world: World(GroupStores, EmptySystems) = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
     try testing.expect(world.stores.pos.group_hook == null);
     try testing.expect(world.stores.vel.group_hook == null);
@@ -1078,7 +1101,8 @@ test "World.advanceRingBuffers rotates ring and double-buffered stores" {
         plain: SparseSet(i32),
     };
     const W = World(Stores, struct {});
-    var world = W.init(testing.allocator);
+    var world: W = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
 
     const e = try world.createEntity();

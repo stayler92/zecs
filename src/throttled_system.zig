@@ -240,9 +240,9 @@ test "ThrottledSystem integrates with World" {
     };
     const W = World(Stores, Systems);
 
-    var world = W.init(testing.allocator);
+    var world: W = undefined;
+    world.init(testing.allocator);
     defer world.deinit();
-    world.initSystems();
 
     // accumulator starts at interval=1.0; each tick of 0.6 crosses the threshold
     try world.tick(0.6); // 1.0+0.6=1.6 → fires once, remainder 0.6

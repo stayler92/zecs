@@ -42,10 +42,12 @@ runtime component registry.
 
 ### World init of stores
 
-`World.init` loops store fields at comptime and calls each field’s
-`init(allocator)`. Every store-shaped field (including `InputState` and
-`CommandQueues`) implements that shape so construction is uniform. `deinit`
-mirrors the same loop.
+`World.init` is in-place (`fn init(self: *Self, allocator)`). It loops store
+fields at comptime and calls each field’s `init(allocator)`, then binds group
+hooks and each system’s `init(world)` into that live World. Every store-shaped
+field (including `InputState` and `CommandQueues`) implements that shape so
+construction is uniform. `deinit` mirrors the store loop. Do not copy World
+after `init`.
 
 ## SparseSet (default backend)
 

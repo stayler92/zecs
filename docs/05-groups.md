@@ -18,15 +18,15 @@ const World = ecs.WorldWithGroups(Stores, Systems, Groups);
 | Exclusive ownership | A `Stores` field belongs to at most one group (comptime error on double-own) |
 | Min fields | ≥2 field names per `FullOwning` |
 | SparseSet only | Non-`SparseSet` members rejected at comptime |
-| Hook wiring | In `initSystems` only (stable World address) |
+| Hook wiring | In `World.init` only (live `*Self`) |
 | Value-only insert | Updates value; does **not** fire hooks or change size |
 | Views | `slice` / `entities` re-derive every call; never cache `[]T` from `init` |
 | Bulk clear | `world.clearGroup(.movers)` — not lone `SparseSet.clear` on owned fields |
 
 ## Load order (mandatory)
 
-capacity → `initSystems()` (wires hooks + binds systems) → `createEntity` +
-inserts. Inserts before hooks leave group sizes at 0 forever.
+`init` (wires hooks + binds systems) → `createEntity` + inserts. Inserts
+before `init` are use-after-undefined.
 
 ## Iteration
 

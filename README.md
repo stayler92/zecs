@@ -75,8 +75,8 @@ const Stores = struct {
 const Systems = struct { move: MoveSystem };
 const World = ecs.World(Stores, Systems);
 
-var world = World.init(allocator);
-world.initSystems(); // bind after the world value is at its final address
+var world: World = undefined;
+world.init(allocator);
 defer world.deinit();
 
 const e = try world.createEntity();
@@ -85,9 +85,9 @@ try world.stores.vel.insert(e.id, .{ .dx = 1, .dy = 0 });
 try world.tick(dt);
 ```
 
-Two-phase startup is mandatory: `init` constructs stores; `initSystems` wires
-group hooks and calls each system's `init(world)` so pointers into `self.stores`
-are stable.
+`World.init` is in-place: it constructs stores, wires group hooks, and calls
+each system's `init(world)` so pointers into `self.stores` are taken on the
+live World. Do not copy World after `init`.
 
 A runnable group-based version lives in [`examples/movers.zig`](examples/movers.zig):
 
@@ -142,8 +142,7 @@ const pos = self.movers.slice(.pos);
 const vel = self.movers.slice(.vel);
 ```
 
-Load order: `init` → `initSystems()` (hooks) → `createEntity` + inserts.
-Inserts before hooks leave group sizes at 0 forever.
+Load order: `init` (hooks) → `createEntity` + inserts.
 
 A `Stores` field belongs to at most one group. `SparseSet.clear` on a hooked
 store panics in safe builds; use `world.clearGroup(.movers)`.

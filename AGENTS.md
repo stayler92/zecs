@@ -21,7 +21,7 @@ Package name `zecs`. Import module name `ecs`. Requires **Zig 0.16.0**.
 - Do not invent synonyms (see CONTEXT.md).
 - Do not add a component registry, system vtable, or scheduler.
 - `Stores` / `Systems` field order is causality.
-- Two-phase startup: `init` then `initSystems()` before inserts.
+- In-place startup: `var world: W = undefined; world.init(allocator);` before inserts. Do not copy World after `init`.
 - After a coherent change: `zig fmt --check . && zig build test`
 - Also run `zig build example` if you touched groups or World init.
 - Do not add `std.debug.print` in tests (Zig 0.16 listen-runner false alarm).

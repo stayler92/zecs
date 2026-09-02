@@ -5,7 +5,7 @@ How simulation logic is structured and ordered.
 ## Mental model
 
 ```text
-World.init → World.initSystems()   // bind after world address is stable
+World.init                         // stores + hooks + system bind (live *Self)
        │
 World.tick(dt):
   runMemoryPressurePass()
@@ -22,23 +22,22 @@ A system is a concrete struct with:
 
 | Member | Required? | Role |
 |--------|-----------|------|
-| `init(self, world: anytype)` | Optional | Bind store views / pointers after world is at its final address |
+| `init(self, world: anytype)` | Optional | Bind store views / pointers; called from `World.init` |
 | `update(self, dt: f32)` | Yes | Per-step work |
 
 World does **not** dispatch via vtables for systems. `Systems` is a comptime
 struct of concrete instances; `World.tick` calls `update` with an `inline for`
 over fields **in declaration order**.
 
-Two-phase startup:
+In-place startup:
 
 ```zig
-var world = MyWorld.init(allocator); // stores only
-world.initSystems();                     // bind systems to self.stores
+var world: MyWorld = undefined;
+world.init(allocator); // stores + hooks + system bind
 defer world.deinit();
 ```
 
-`initSystems` must run only after the world value is stable in memory (no
-further moves).
+Do not copy World after `init`.
 
 ## Binding conventions
 

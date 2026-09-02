@@ -40,8 +40,8 @@ pub fn main() !void {
     defer _ = debug_alloc.deinit();
     const allocator = debug_alloc.allocator();
 
-    var world = MoversWorld.init(allocator);
-    world.initSystems();
+    var world: MoversWorld = undefined;
+    world.init(allocator);
     defer world.deinit();
 
     const e = try world.createEntity();

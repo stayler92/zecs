@@ -1,6 +1,6 @@
 .{
     .name = .zecs,
-    .version = "0.1.1",
+    .version = "0.1.2",
     .fingerprint = 0xec068ecd04e600be,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{},

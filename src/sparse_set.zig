@@ -30,8 +30,8 @@ pub fn SparseSet(comptime T: type) type {
         // Incremented on structural changes (insert new, remove, clear).
         // Captured by iterators to detect mutation during iteration in debug builds.
         mutation_count: usize,
-        /// Set by GroupRuntime after World is at its final address. Null for
-        /// ungrouped stores (default).
+        /// Set by GroupRuntime during World.init. Null for ungrouped stores
+        /// (default).
         group_hook: ?GroupHook,
 
         pub fn init(allocator: std.mem.Allocator) Self {
