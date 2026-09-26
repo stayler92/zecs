@@ -1,5 +1,4 @@
 {
-  "zig.path": "/usr/local/bin/zig",
   "zig.zls.enabled": "on",
   "zig.initialSetupDone": true,
   "editor.formatOnSave": true,

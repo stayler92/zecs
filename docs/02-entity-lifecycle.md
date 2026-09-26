@@ -24,7 +24,7 @@ destroyEntity(ref)
 
 ## Types
 
-Defined in `src/constants.zig`:
+Defined in `src/entity/constants.zig`:
 
 | Type | Backing | Role |
 |------|---------|------|

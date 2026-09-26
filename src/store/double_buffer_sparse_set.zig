@@ -1,6 +1,6 @@
 const std = @import("std");
 const SparseSet = @import("sparse_set.zig").SparseSet;
-const EntityIdType = @import("constants.zig").EntityIdType;
+const EntityIdType = @import("../entity/constants.zig").EntityIdType;
 
 // A double-buffered wrapper around SparseSet.
 //

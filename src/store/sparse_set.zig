@@ -1,5 +1,5 @@
 const std = @import("std");
-const EntityIdType = @import("constants.zig").EntityIdType;
+const EntityIdType = @import("../entity/constants.zig").EntityIdType;
 const component_store = @import("component_store.zig");
 
 /// Optional structural-change hook installed by GroupRuntime on full-owning

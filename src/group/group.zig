@@ -1,7 +1,7 @@
 const std = @import("std");
-const EntityIdType = @import("constants.zig").EntityIdType;
-const SparseSet = @import("sparse_set.zig").SparseSet;
-const GroupHook = @import("sparse_set.zig").GroupHook;
+const EntityIdType = @import("../entity/constants.zig").EntityIdType;
+const SparseSet = @import("../store/sparse_set.zig").SparseSet;
+const GroupHook = @import("../store/sparse_set.zig").GroupHook;
 
 // ---------------------------------------------------------------------------
 // FullOwning — comptime marker for Groups declaration fields

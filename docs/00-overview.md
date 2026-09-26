@@ -9,20 +9,20 @@ These docs describe what the code does today, not design aspirations.
 |------|------|
 | `src/root.zig` | Public exports + `refAllDecls` test pull-in |
 | `src/world.zig` | `World` / `WorldWithGroups` |
-| `src/constants.zig` | `EntityIdType`, `GenerationType`, `EntityRef` |
-| `src/sparse_set.zig` | Default per-entity store + `GroupHook` |
-| `src/group.zig` | Full-owning groups |
-| `src/component_store.zig` | `ComponentStore(T)` vtable + adapters |
-| `src/query.zig` | `query` / `queryExclude` |
-| `src/singleton_store.zig` | Optional global value |
-| `src/command_queues.zig` | Tick-scoped command bag |
-| `src/input_state.zig` | Device snapshot |
-| `src/throttled_system.zig` | Accumulator wrapper |
-| `src/sliding_window.zig` | Chronological ring |
-| `src/dense_sparse_set.zig` | Flat-sparse backend |
-| `src/ring_buffered_sparse_set.zig` | N-buffer history backend |
-| `src/double_buffer_sparse_set.zig` | Ping-pong + deferred commands |
-| `src/sparse_set_sort.zig` | Dense-prefix reorder helper |
+| `src/entity/constants.zig` | `EntityIdType`, `GenerationType`, `EntityRef` |
+| `src/store/sparse_set.zig` | Default per-entity store + `GroupHook` |
+| `src/group/group.zig` | Full-owning groups |
+| `src/store/component_store.zig` | `ComponentStore(T)` vtable + adapters |
+| `src/query/query.zig` | `query` / `queryExclude` |
+| `src/store/singleton_store.zig` | Optional global value |
+| `src/command/command_queues.zig` | Tick-scoped command bag |
+| `src/input/input_state.zig` | Device snapshot |
+| `src/system/throttled_system.zig` | Accumulator wrapper |
+| `src/store/sliding_window.zig` | Chronological ring |
+| `src/store/dense_sparse_set.zig` | Flat-sparse backend |
+| `src/store/ring_buffered_sparse_set.zig` | N-buffer history backend |
+| `src/store/double_buffer_sparse_set.zig` | Ping-pong + deferred commands |
+| `src/store/sparse_set_sort.zig` | Dense-prefix reorder helper |
 | `examples/movers.zig` | Runnable group + system |
 | `build.zig` | Module `ecs`, `zig build test`, `zig build example` |
 

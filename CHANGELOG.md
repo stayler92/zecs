@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [SemVer](https://semver.org/). **0.x is unstable**: the
 public API may change without a major bump. Pin consumers to a tag.
 
+## [Unreleased]
+
+### Changed
+
+- Source files are grouped by role (`entity/`, `store/`, `group/`, `query/`,
+  `command/`, `input/`, `system/`). Exports from the `ecs` module are unchanged.
+
 ## [0.1.3] — 2026-09-02
 
 ### Changed

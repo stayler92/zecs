@@ -1,5 +1,5 @@
 const std = @import("std");
-const EntityIdType = @import("constants.zig").EntityIdType;
+const EntityIdType = @import("../entity/constants.zig").EntityIdType;
 const component_store = @import("component_store.zig");
 
 const EMPTY: EntityIdType = std.math.maxInt(EntityIdType);

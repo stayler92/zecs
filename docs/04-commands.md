@@ -20,7 +20,7 @@ consumers (later Systems fields)
 
 ## Module
 
-`src/command_queues.zig` — `CommandQueues(comptime Queues)`.
+`src/command/command_queues.zig` — `CommandQueues(comptime Queues)`.
 
 The consumer owns payload types:
 

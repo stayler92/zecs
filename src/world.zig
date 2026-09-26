@@ -1,11 +1,11 @@
 const std = @import("std");
-const SparseSet = @import("./sparse_set.zig").SparseSet;
-const constants = @import("./constants.zig");
+const SparseSet = @import("store/sparse_set.zig").SparseSet;
+const constants = @import("entity/constants.zig");
 const EntityIdType = constants.EntityIdType;
 const GenerationType = constants.GenerationType;
 pub const EntityRef = constants.EntityRef;
-const query_mod = @import("./query.zig");
-const group_mod = @import("./group.zig");
+const query_mod = @import("query/query.zig");
+const group_mod = @import("group/group.zig");
 
 // World(Stores, Systems) — empty Groups (default; no hooks).
 // WorldWithGroups(Stores, Systems, Groups) — full-owning groups (EnTT-style).
@@ -1085,8 +1085,8 @@ test "group: World two-arg form is empty Groups (existing call sites)" {
 }
 
 test "World.advanceRingBuffers rotates ring and double-buffered stores" {
-    const Ring = @import("./ring_buffered_sparse_set.zig").RingBufferedSparseSet;
-    const Dbl = @import("./double_buffer_sparse_set.zig").DoubleBufferedSparseSet;
+    const Ring = @import("store/ring_buffered_sparse_set.zig").RingBufferedSparseSet;
+    const Dbl = @import("store/double_buffer_sparse_set.zig").DoubleBufferedSparseSet;
     const Stores = struct {
         ring: Ring(i32, 2),
         dbl: Dbl(i32),

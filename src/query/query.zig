@@ -1,7 +1,7 @@
 const std = @import("std");
-const SparseSet = @import("./sparse_set.zig").SparseSet;
-const DenseSparseSet = @import("./dense_sparse_set.zig").DenseSparseSet;
-const constants = @import("./constants.zig");
+const SparseSet = @import("../store/sparse_set.zig").SparseSet;
+const DenseSparseSet = @import("../store/dense_sparse_set.zig").DenseSparseSet;
+const constants = @import("../entity/constants.zig");
 const EntityIdType = constants.EntityIdType;
 
 /// Free entry point — runs a query against any Stores struct.

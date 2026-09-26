@@ -1,5 +1,5 @@
 const std = @import("std");
-const EntityIdType = @import("constants.zig").EntityIdType;
+const EntityIdType = @import("../entity/constants.zig").EntityIdType;
 const SparseSet = @import("sparse_set.zig").SparseSet;
 const DenseSparseSet = @import("dense_sparse_set.zig").DenseSparseSet;
 const RingBufferedSparseSet = @import("ring_buffered_sparse_set.zig").RingBufferedSparseSet;

@@ -126,8 +126,8 @@ fn ThrottledSystemCore(
 // ====================================================================
 
 const testing = std.testing;
-const World = @import("./world.zig").World;
-const SparseSet = @import("./sparse_set.zig").SparseSet;
+const World = @import("../world.zig").World;
+const SparseSet = @import("../store/sparse_set.zig").SparseSet;
 
 const CountSystem = struct {
     calls: u32 = 0,

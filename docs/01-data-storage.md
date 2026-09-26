@@ -51,7 +51,7 @@ after `init`.
 
 ## SparseSet (default backend)
 
-`src/sparse_set.zig`
+`src/store/sparse_set.zig`
 
 - Sparse index: `AutoHashMapUnmanaged(EntityIdType, dense_index)`
 - Dense SoA: parallel `entity_ids` + `values` arrays
@@ -68,7 +68,7 @@ aligned across stores.
 
 ## ComponentStore vtable
 
-`src/component_store.zig` — systems hold `ComponentStore(T)`, not concrete
+`src/store/component_store.zig` — systems hold `ComponentStore(T)`, not concrete
 sparse-set types:
 
 ```zig

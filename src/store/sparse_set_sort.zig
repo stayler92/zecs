@@ -1,6 +1,6 @@
 const std = @import("std");
 const SparseSet = @import("./sparse_set.zig").SparseSet;
-const EntityIdType = @import("constants.zig").EntityIdType;
+const EntityIdType = @import("../entity/constants.zig").EntityIdType;
 
 /// Reorders a single SparseSet so that the entities in `entities` occupy
 /// dense slots [0..entities.len] in the given order.

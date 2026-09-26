@@ -57,7 +57,7 @@ Producer-before-handler is enforced only by field order.
 
 ## ThrottledSystem
 
-`src/throttled_system.zig` wraps any system `T`:
+`src/system/throttled_system.zig` wraps any system `T`:
 
 ```zig
 ThrottledSystem(T, interval_seconds)

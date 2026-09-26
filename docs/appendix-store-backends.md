@@ -21,13 +21,13 @@ same `ComponentStore(T)` vtable.
 
 | Type | File | Characteristics |
 |------|------|-----------------|
-| `SparseSet(T)` | `sparse_set.zig` | Hash sparse; default. Optional group hook. |
-| `DenseSparseSet(T)` | `dense_sparse_set.zig` | Flat sparse array; O(1) index; grows with entity id range via pressure pass |
-| `RingBufferedSparseSet(T, N)` | `ring_buffered_sparse_set.zig` | N parallel value arrays; `advance()` rotates write index |
-| `DoubleBufferedSparseSet(T)` | `double_buffer_sparse_set.zig` | Ping-pong + deferred commands; `advance()` aliases `swap()` |
-| `SingletonStore(T)` | `singleton_store.zig` | Optional single value; no `remove` |
-| `InputState` | `input_state.zig` | Device snapshot; World-shaped `init`/`deinit` |
-| `CommandQueues(Q)` | `command_queues.zig` | Tick-scoped lists; `clearTickScoped` |
+| `SparseSet(T)` | `store/sparse_set.zig` | Hash sparse; default. Optional group hook. |
+| `DenseSparseSet(T)` | `store/dense_sparse_set.zig` | Flat sparse array; O(1) index; grows with entity id range via pressure pass |
+| `RingBufferedSparseSet(T, N)` | `store/ring_buffered_sparse_set.zig` | N parallel value arrays; `advance()` rotates write index |
+| `DoubleBufferedSparseSet(T)` | `store/double_buffer_sparse_set.zig` | Ping-pong + deferred commands; `advance()` aliases `swap()` |
+| `SingletonStore(T)` | `store/singleton_store.zig` | Optional single value; no `remove` |
+| `InputState` | `input/input_state.zig` | Device snapshot; World-shaped `init`/`deinit` |
+| `CommandQueues(Q)` | `command/command_queues.zig` | Tick-scoped lists; `clearTickScoped` |
 
 ## Query support
 
@@ -37,7 +37,7 @@ match list.
 
 ## Group sort
 
-`sparse_set_sort.zig` can reorder dense prefixes for multi-component
+`store/sparse_set_sort.zig` can reorder dense prefixes for multi-component
 alignment. Live group membership uses hooks + `swapDense`, not this sorter.
 
 ## Practical guidance

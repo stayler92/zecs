@@ -1,5 +1,5 @@
 const std = @import("std");
-const ComponentStore = @import("component_store.zig").ComponentStore;
+const ComponentStore = @import("../store/component_store.zig").ComponentStore;
 
 /// Entity ID type — change to u64 if you need more than 4 billion entities
 pub const EntityIdType = u32;
